@@ -33,6 +33,8 @@ export default function Home() {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const voicesRef = useRef(new Map<number, { osc: OscillatorNode; osc2: OscillatorNode; gain: GainNode }>());
+  const downAtRef = useRef(new Map<number, number>());
 
   const getCtx = useCallback(() => {
     if (!audioRef.current) {
@@ -75,6 +77,66 @@ export default function Home() {
     [getCtx],
   );
 
+  /** Start a note that keeps playing until stopTone is called (hold-to-play). */
+  const startTone = useCallback(
+    (idx: number, freq: number) => {
+      try {
+        const ctx = getCtx();
+        // stop any existing voice for this key first
+        const existing = voicesRef.current.get(idx);
+        if (existing) {
+          try { existing.osc.stop(); existing.osc2.stop(); } catch { /* already stopped */ }
+          existing.gain.disconnect();
+          voicesRef.current.delete(idx);
+        }
+        const osc = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+        osc2.type = "sine";
+        osc2.frequency.value = freq * 2;
+        const gain2 = ctx.createGain();
+        gain2.gain.value = 0.25;
+        const now = ctx.currentTime;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.5, now + 0.03);
+        gain.gain.setTargetAtTime(0.35, now + 0.05, 0.4); // gentle settle while held
+        osc.connect(gain);
+        osc2.connect(gain2);
+        gain2.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc2.start(now);
+        voicesRef.current.set(idx, { osc, osc2, gain });
+      } catch {
+        /* audio not available */
+      }
+    },
+    [getCtx],
+  );
+
+  const stopTone = useCallback((idx: number) => {
+    const v = voicesRef.current.get(idx);
+    if (!v) return;
+    voicesRef.current.delete(idx);
+    try {
+      const ctx = audioRef.current;
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      v.gain.gain.cancelScheduledValues(now);
+      v.gain.gain.setTargetAtTime(0.0001, now, 0.05);
+      v.osc.stop(now + 0.25);
+      v.osc2.stop(now + 0.25);
+    } catch {
+      /* already stopped */
+    }
+  }, []);
+
+  const stopAllTones = useCallback(() => {
+    Array.from(voicesRef.current.keys()).forEach((k) => stopTone(k));
+  }, [stopTone]);
+
   const speak = useCallback((text: string) => {
     try {
       window.speechSynthesis.cancel();
@@ -92,15 +154,18 @@ export default function Home() {
     timers.current = [];
     setPlaying(false);
     setActiveNote(null);
-  }, []);
+    stopAllTones();
+  }, [stopAllTones]);
 
   useEffect(() => () => stopSong(), [stopSong]);
 
-  const tapNote = useCallback(
-    (idx: number, sayIt = true) => {
+  /** Press a note key: the note plays for as long as it is held. */
+  const noteDown = useCallback(
+    (idx: number) => {
       const note = NOTES[idx];
-      playTone(note.freq, 0.9);
-      if (sayIt) speak(note.name.replace("′", ""));
+      downAtRef.current.set(idx, Date.now());
+      startTone(idx, note.freq);
+      speak(note.name.replace("′", ""));
       setActiveNote(idx);
       setDisplay({
         big: note.name,
@@ -109,21 +174,51 @@ export default function Home() {
         color: note.color,
         stamp: Date.now(),
       });
-      timers.current.push(setTimeout(() => setActiveNote((a) => (a === idx ? null : a)), 450));
     },
-    [playTone, speak],
+    [startTone, speak],
   );
 
-  // Computer keyboard: A S D F G H J K play the notes in music modes
+  /** Release a note key: keep a short minimum ring for quick taps, then stop. */
+  const noteUp = useCallback(
+    (idx: number) => {
+      const downAt = downAtRef.current.get(idx) ?? Date.now();
+      const held = Date.now() - downAt;
+      const wait = Math.max(0, 380 - held);
+      timers.current.push(
+        setTimeout(() => {
+          stopTone(idx);
+          setActiveNote((a) => (a === idx ? null : a));
+        }, wait),
+      );
+    },
+    [stopTone],
+  );
+
+  // Computer keyboard: hold A S D F G H J K to play; the note stops when the key is released.
+  // Esc stops everything — song, held notes, and voice.
   useEffect(() => {
-    if (mode !== "sargam" && mode !== "piano") return;
-    const onKey = (e: KeyboardEvent) => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        stopSong();
+        try { window.speechSynthesis.cancel(); } catch { /* noop */ }
+        return;
+      }
+      if (mode !== "sargam" && mode !== "piano") return;
+      if (e.repeat) return;
       const idx = NOTES.findIndex((n) => n.keyboard === e.key.toLowerCase());
-      if (idx >= 0) tapNote(idx);
+      if (idx >= 0) noteDown(idx);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mode, tapNote]);
+    const onKeyUp = (e: KeyboardEvent) => {
+      const idx = NOTES.findIndex((n) => n.keyboard === e.key.toLowerCase());
+      if (idx >= 0) stopTone(idx);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [mode, noteDown, stopTone, stopSong]);
 
   function playSong(song: number[], label: string) {
     stopSong();
@@ -312,7 +407,10 @@ export default function Home() {
               {NOTES.map((note, i) => (
                 <button
                   key={note.name}
-                  onPointerDown={() => tapNote(i)}
+                  onPointerDown={() => noteDown(i)}
+                  onPointerUp={() => noteUp(i)}
+                  onPointerLeave={() => noteUp(i)}
+                  onContextMenu={(e) => e.preventDefault()}
                   className={`flex h-52 flex-1 flex-col items-center justify-end rounded-b-3xl border-b-8 border-black/20 pb-4 shadow-md transition sm:h-64 ${
                     note.color
                   } ${activeNote === i ? "scale-[1.03] brightness-110 ring-4 ring-white" : ""} active:scale-95`}
@@ -330,7 +428,8 @@ export default function Home() {
               ))}
             </div>
             <p className="mt-3 text-center text-sm font-semibold text-stone-500">
-              On a computer? Play with keys A S D F G H J K 🎹
+              Tap a key — or hold it (or hold A S D F G H J K) to keep the note playing 🎹 · Press{" "}
+              <span className="rounded bg-stone-800 px-1.5 py-0.5 text-white">Esc</span> to stop all sound
             </p>
           </div>
         )}
