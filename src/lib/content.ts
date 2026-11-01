@@ -75,3 +75,68 @@ export const NOTES: Note[] = [
 /** A tiny built-in tune on the sargam scale (indexes into NOTES). */
 export const SCALE_SONG = [0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0];
 export const TWINKLE = [0, 0, 4, 4, 5, 5, 4, 3, 3, 2, 2, 1, 1, 0];
+
+/** Flashcards for the Slide Cards mode. */
+export interface FlashCard {
+  label: string;
+  emoji?: string;
+  bg?: string; // for color cards
+  say?: string;
+}
+
+export interface FlashCategory {
+  id: string;
+  label: string;
+  cards: FlashCard[];
+}
+
+export const FLASH_CATEGORIES: FlashCategory[] = [
+  {
+    id: "animals",
+    label: "🐶 Animals",
+    cards: [
+      { label: "Dog", emoji: "🐶" }, { label: "Cat", emoji: "🐱" }, { label: "Lion", emoji: "🦁" },
+      { label: "Elephant", emoji: "🐘" }, { label: "Monkey", emoji: "🐵" }, { label: "Tiger", emoji: "🐯" },
+      { label: "Cow", emoji: "🐮" }, { label: "Pig", emoji: "🐷" }, { label: "Duck", emoji: "🦆" },
+      { label: "Frog", emoji: "🐸" }, { label: "Bear", emoji: "🐻" }, { label: "Penguin", emoji: "🐧" },
+    ],
+  },
+  {
+    id: "fruits",
+    label: "🍎 Fruits",
+    cards: [
+      { label: "Apple", emoji: "🍎" }, { label: "Banana", emoji: "🍌" }, { label: "Grapes", emoji: "🍇" },
+      { label: "Orange", emoji: "🍊" }, { label: "Strawberry", emoji: "🍓" }, { label: "Watermelon", emoji: "🍉" },
+      { label: "Mango", emoji: "🥭" }, { label: "Pineapple", emoji: "🍍" }, { label: "Peach", emoji: "🍑" },
+      { label: "Lemon", emoji: "🍋" },
+    ],
+  },
+  {
+    id: "colors",
+    label: "🎨 Colors",
+    cards: [
+      { label: "Red", bg: "bg-red-500" }, { label: "Blue", bg: "bg-blue-500" },
+      { label: "Green", bg: "bg-green-500" }, { label: "Yellow", bg: "bg-yellow-400" },
+      { label: "Orange", bg: "bg-orange-500" }, { label: "Purple", bg: "bg-purple-500" },
+      { label: "Pink", bg: "bg-pink-400" }, { label: "Brown", bg: "bg-amber-800" },
+    ],
+  },
+  {
+    id: "shapes",
+    label: "🔷 Shapes",
+    cards: [
+      { label: "Circle", emoji: "🔵" }, { label: "Square", emoji: "🟦" }, { label: "Triangle", emoji: "🔺" },
+      { label: "Star", emoji: "⭐" }, { label: "Heart", emoji: "❤️" }, { label: "Rectangle", emoji: "🟥" },
+      { label: "Diamond", emoji: "🔷" }, { label: "Moon", emoji: "🌙" },
+    ],
+  },
+  {
+    id: "vehicles",
+    label: "🚗 Vehicles",
+    cards: [
+      { label: "Car", emoji: "🚗" }, { label: "Bus", emoji: "🚌" }, { label: "Train", emoji: "🚂" },
+      { label: "Airplane", emoji: "✈️" }, { label: "Boat", emoji: "⛵" }, { label: "Bicycle", emoji: "🚲" },
+      { label: "Truck", emoji: "🚚" }, { label: "Rocket", emoji: "🚀" },
+    ],
+  },
+];

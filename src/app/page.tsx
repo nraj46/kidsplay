@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LETTERS, NOTES, NUMBER_COLORS, NUMBER_WORDS, SCALE_SONG, TWINKLE } from "@/lib/content";
+import { FLASH_CATEGORIES, LETTERS, NOTES, NUMBER_COLORS, NUMBER_WORDS, SCALE_SONG, TWINKLE } from "@/lib/content";
+import { nextPuzzle, type Puzzle } from "@/lib/puzzles";
 
-type Mode = "abc" | "num" | "sargam" | "piano";
+type Mode = "abc" | "num" | "sargam" | "piano" | "cards" | "puzzle";
 
 interface Display {
   big: string;
@@ -19,6 +20,8 @@ const MODES: { id: Mode; label: string }[] = [
   { id: "num", label: "🔢 123" },
   { id: "sargam", label: "🎶 Sa Re Ga Ma" },
   { id: "piano", label: "🎹 Piano" },
+  { id: "cards", label: "🃏 Slide Cards" },
+  { id: "puzzle", label: "🧩 Puzzles" },
 ];
 
 export default function Home() {
@@ -286,7 +289,7 @@ export default function Home() {
     try { window.speechSynthesis.cancel(); } catch { /* noop */ }
     setMode(m);
     setDisplay({
-      big: m === "abc" ? "Aa" : m === "num" ? "123" : m === "sargam" ? "Sa" : "🎹",
+      big: m === "abc" ? "Aa" : m === "num" ? "123" : m === "sargam" ? "Sa" : m === "cards" ? "🃏" : m === "puzzle" ? "🧩" : "🎹",
       sub:
         m === "abc"
           ? "Tap a letter!"
@@ -294,7 +297,11 @@ export default function Home() {
             ? "Tap a number!"
             : m === "sargam"
               ? "Tap the notes — Sa Re Ga Ma!"
-              : "Play the piano!",
+              : m === "cards"
+                ? "Slide the cards left and right!"
+                : m === "puzzle"
+                  ? "Pick your age and play!"
+                  : "Play the piano!",
       color: "bg-yellow-300",
       stamp: Date.now(),
     });
@@ -433,11 +440,311 @@ export default function Home() {
             </p>
           </div>
         )}
+        {mode === "cards" && <CardsMode speak={speak} setDisplay={setDisplay} />}
+
+        {mode === "puzzle" && <PuzzleMode speak={speak} playTone={playTone} setDisplay={setDisplay} />}
       </div>
 
       <footer className="pb-4 text-center text-xs font-medium text-stone-400">
         KidsPlay — free forever, no ads, no sign-up. Sounds and voices are made right in your browser.
       </footer>
     </main>
+  );
+}
+
+/* ---------------- Slide Cards mode ---------------- */
+
+const CARD_PALETTE = [
+  "bg-red-300", "bg-orange-300", "bg-amber-300", "bg-lime-300", "bg-green-300",
+  "bg-teal-300", "bg-cyan-300", "bg-sky-300", "bg-indigo-300", "bg-purple-300",
+  "bg-pink-300", "bg-rose-300",
+];
+
+function CardsMode({
+  speak,
+  setDisplay,
+}: {
+  speak: (t: string) => void;
+  setDisplay: (d: Display) => void;
+}) {
+  const [catId, setCatId] = useState(FLASH_CATEGORIES[0].id);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const cat = FLASH_CATEGORIES.find((c) => c.id === catId) ?? FLASH_CATEGORIES[0];
+
+  function slide(dir: number) {
+    trackRef.current?.scrollBy({ left: dir * 300, behavior: "smooth" });
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap justify-center gap-2">
+        {FLASH_CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => {
+              setCatId(c.id);
+              trackRef.current?.scrollTo({ left: 0 });
+            }}
+            className={`rounded-full px-4 py-2 text-base font-extrabold shadow ${
+              catId === c.id ? "bg-stone-900 text-white" : "bg-white text-stone-800"
+            }`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="relative">
+        <div
+          ref={trackRef}
+          className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-2 pb-3"
+        >
+          {cat.cards.map((card, i) => (
+            <button
+              key={card.label}
+              onClick={() => {
+                speak(card.say ?? card.label);
+                setDisplay({
+                  big: card.label,
+                  sub: card.label + "!",
+                  emoji: card.emoji,
+                  color: card.bg ?? CARD_PALETTE[i % CARD_PALETTE.length],
+                  stamp: Date.now(),
+                });
+              }}
+              className={`flex h-72 min-w-[240px] snap-center flex-col items-center justify-center rounded-[2rem] border-4 border-white shadow-xl transition active:scale-95 sm:min-w-[280px] ${
+                card.bg ?? CARD_PALETTE[i % CARD_PALETTE.length]
+              }`}
+            >
+              {card.emoji ? (
+                <span className="text-8xl">{card.emoji}</span>
+              ) : (
+                <span className="flex h-28 w-28 items-center justify-center rounded-full bg-white/90 text-5xl">🎨</span>
+              )}
+              <span className={`mt-3 text-3xl font-black ${card.bg ? "text-white drop-shadow" : "text-stone-800"}`}>
+                {card.label}
+              </span>
+              <span className={`text-sm font-bold ${card.bg ? "text-white/90" : "text-stone-500"}`}>tap to hear it 🔊</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-1 flex justify-center gap-3">
+          <button onClick={() => slide(-1)} className="rounded-full bg-stone-900 px-5 py-2.5 text-lg font-black text-white shadow active:scale-95">
+            ⬅
+          </button>
+          <span className="self-center text-sm font-bold text-stone-500">slide or swipe!</span>
+          <button onClick={() => slide(1)} className="rounded-full bg-stone-900 px-5 py-2.5 text-lg font-black text-white shadow active:scale-95">
+            ➡
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Puzzles mode (ages 2–6) ---------------- */
+
+const PRAISES = ["Yay! Great job!", "Super star!", "You did it! Well done!", "Amazing! High five!"];
+
+function PuzzleMode({
+  speak,
+  playTone,
+  setDisplay,
+}: {
+  speak: (t: string) => void;
+  playTone: (freq: number, seconds?: number) => void;
+  setDisplay: (d: Display) => void;
+}) {
+  const [age, setAge] = useState(3);
+  const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
+  const [stars, setStars] = useState(0);
+  const [wrongIds, setWrongIds] = useState<Set<string>>(new Set());
+  const [solved, setSolved] = useState(false);
+  const [simonPhase, setSimonPhase] = useState<"playing" | "input">("playing");
+  const [simonProgress, setSimonProgress] = useState(0);
+  const [simonActive, setSimonActive] = useState<number | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const later = useCallback((fn: () => void, ms: number) => {
+    timers.current.push(setTimeout(fn, ms));
+  }, []);
+
+  const playSimon = useCallback(
+    (notes: number[]) => {
+      setSimonPhase("playing");
+      setSimonProgress(0);
+      notes.forEach((n, i) => {
+        later(() => {
+          setSimonActive(n);
+          playTone(NOTES[n].freq, 0.55);
+          later(() => setSimonActive(null), 350);
+          if (i === notes.length - 1) later(() => setSimonPhase("input"), 500);
+        }, 650 * (i + 1));
+      });
+    },
+    [later, playTone],
+  );
+
+  const startPuzzle = useCallback(
+    (forAge: number) => {
+      timers.current.forEach(clearTimeout);
+      timers.current = [];
+      const p = nextPuzzle(forAge);
+      setPuzzle(p);
+      setWrongIds(new Set());
+      setSolved(false);
+      speak(p.say);
+      if (p.kind === "simon" && p.simonNotes) playSimon(p.simonNotes);
+    },
+    [speak, playSimon],
+  );
+
+  function chooseAge(a: number) {
+    setAge(a);
+    setPuzzle(null);
+    setSolved(false);
+    speak(`Age ${a}. Let's play!`);
+  }
+
+  function celebrate(p: Puzzle) {
+    setSolved(true);
+    setStars((s) => s + 1);
+    const praise = PRAISES[Math.floor(Math.random() * PRAISES.length)];
+    speak(praise);
+    setDisplay({ big: "⭐", sub: praise, emoji: "🎉", color: "bg-yellow-300", stamp: Date.now() });
+    later(() => startPuzzle(age), 1600);
+  }
+
+  function choose(id: string) {
+    if (!puzzle || solved || puzzle.kind === "simon") return;
+    if (id === puzzle.answerId) {
+      celebrate(puzzle);
+    } else {
+      setWrongIds((w) => new Set(w).add(id));
+      speak("Try again! You can do it!");
+    }
+  }
+
+  function simonTap(i: number) {
+    if (!puzzle || solved || simonPhase !== "input" || !puzzle.simonNotes) return;
+    playTone(NOTES[i].freq, 0.6);
+    setSimonActive(i);
+    later(() => setSimonActive(null), 300);
+    if (i === puzzle.simonNotes[simonProgress]) {
+      const next = simonProgress + 1;
+      setSimonProgress(next);
+      if (next === puzzle.simonNotes.length) celebrate(puzzle);
+    } else {
+      speak("Oops! Listen again!");
+      setSimonProgress(0);
+      later(() => playSimon(puzzle.simonNotes as number[]), 900);
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+        <span className="text-base font-extrabold text-stone-600">I am</span>
+        {[2, 3, 4, 5, 6].map((a) => (
+          <button
+            key={a}
+            onClick={() => chooseAge(a)}
+            className={`rounded-full px-4 py-2 text-lg font-black shadow ${
+              age === a ? "bg-stone-900 text-white" : "bg-white text-stone-800"
+            }`}
+          >
+            {a} yrs
+          </button>
+        ))}
+        <span className="ml-2 rounded-full bg-yellow-300 px-4 py-2 text-lg font-black text-stone-800 shadow">
+          ⭐ {stars}
+        </span>
+      </div>
+
+      {!puzzle && (
+        <button
+          onClick={() => startPuzzle(age)}
+          className="mx-auto block rounded-[2rem] bg-green-500 px-10 py-8 text-3xl font-black text-white shadow-xl transition hover:scale-105 active:scale-95"
+        >
+          ▶ Start playing!
+        </button>
+      )}
+
+      {puzzle && (
+        <div className="rounded-[2rem] border-4 border-white bg-white/80 p-5 shadow-xl">
+          <p className="text-center text-2xl font-black text-stone-800">{puzzle.prompt}</p>
+          {puzzle.visual && (
+            <p className="mt-3 text-center text-6xl leading-tight">{puzzle.visual}</p>
+          )}
+          {puzzle.visualStars ? (
+            <p className="mx-auto mt-3 max-w-sm text-center text-3xl leading-snug">
+              {Array.from({ length: puzzle.visualStars }, () => "⭐").join(" ")}
+            </p>
+          ) : null}
+
+          {puzzle.kind === "simon" ? (
+            <div className="mt-5">
+              <p className="mb-3 text-center text-base font-bold text-stone-500">
+                {simonPhase === "playing" ? "👂 Listen…" : `🎹 Your turn! Note ${Math.min(simonProgress + 1, puzzle.simonNotes?.length ?? 1)} of ${puzzle.simonNotes?.length}`}
+              </p>
+              <div className="flex gap-1.5">
+                {NOTES.map((note, i) => (
+                  <button
+                    key={note.name}
+                    onPointerDown={() => simonTap(i)}
+                    className={`flex h-32 flex-1 flex-col items-center justify-end rounded-b-2xl border-b-8 border-black/20 pb-3 shadow transition ${note.color} ${
+                      simonActive === i ? "scale-[1.04] brightness-110 ring-4 ring-stone-800" : ""
+                    }`}
+                  >
+                    <span className="text-base font-black text-white drop-shadow">{note.name}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => puzzle.simonNotes && playSimon(puzzle.simonNotes)}
+                className="mx-auto mt-4 block rounded-full bg-stone-900 px-5 py-2.5 text-sm font-extrabold text-white shadow active:scale-95"
+              >
+                🔊 Hear it again
+              </button>
+            </div>
+          ) : (
+            <div className={`mt-5 grid gap-3 ${puzzle.options.length <= 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+              {puzzle.options.map((opt) => {
+                const isWrong = wrongIds.has(opt.id);
+                const isRight = solved && opt.id === puzzle.answerId;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => choose(opt.id)}
+                    disabled={isWrong}
+                    className={`rounded-3xl border-b-8 border-black/10 py-5 text-5xl font-black shadow-md transition active:scale-95 ${
+                      isRight
+                        ? "bg-green-400 text-white ring-4 ring-green-600"
+                        : isWrong
+                          ? "bg-stone-200 opacity-40"
+                          : "bg-sky-200 text-stone-800 hover:scale-105"
+                    }`}
+                  >
+                    {opt.big}
+                    {opt.label && <span className="block text-base font-extrabold">{opt.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-5 text-center">
+            <button
+              onClick={() => startPuzzle(age)}
+              className="rounded-full bg-white px-5 py-2.5 text-sm font-extrabold text-stone-700 shadow active:scale-95"
+            >
+              🔀 New puzzle
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
